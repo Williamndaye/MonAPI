@@ -8,7 +8,7 @@ app.use(cors());
 app.use(express.json());
 
 // Initialisation Firebase Admin
-const serviceAccount = require("./serviceAccountKey.json");
+const serviceAccount = JSON.parse(process.env.GOOGLE_CREDENTIALS);
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -27,8 +27,11 @@ app.get("/", (req, res) => {
 app.post("/inscription", async (req, res) => {
   const { email, password, nom, type } = req.body;
 
+  if (!email || !password || !nom || !type) {
+    return res.status(400).send({ message: "Tous les champs sont obligatoires" });
+  }
+
   try {
-    // 1. Créer l'utilisateur dans Firebase Authentication
     const userRecord = await admin.auth().createUser({
       email,
       password
@@ -36,12 +39,11 @@ app.post("/inscription", async (req, res) => {
 
     const uid = userRecord.uid;
 
-    // 2. Enregistrer dans Firestore
     await firestore.collection("utilisateurs").doc(uid).set({
       nom,
       email,
       type,
-      online: false // ✅ Ajout de la présence par défaut
+      online: false
     });
 
     res.status(200).send({
@@ -51,13 +53,20 @@ app.post("/inscription", async (req, res) => {
 
   } catch (err) {
     console.error("Erreur lors de l'inscription :", err);
+
+    let errorMessage = "Échec de l'inscription";
+
+    if (err.code === 'auth/email-already-exists') {
+      errorMessage = "Cet email est déjà utilisé";
+      return res.status(400).send({ message: errorMessage });
+    }
+
     res.status(500).send({
-      message: "Échec de l'inscription",
+      message: errorMessage,
       erreur: err.message
     });
   }
 });
-
 
 //ROUTE POUR LA CONNEXION
 // Route connexion
