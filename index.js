@@ -1,3 +1,4 @@
+const axios = require('axios');
 const express = require("express");
 const admin = require("firebase-admin");
 const cors = require("cors");
@@ -22,16 +23,287 @@ app.get("/", (req, res) => {
   res.send("Bienvenue dans l'API TaxiMoto !");
 });
 
-// 🚀 Exemple : Ajouter un utilisateur
+// ROUTE POUR L'INSCRIPTION
 app.post("/inscription", async (req, res) => {
-  const { uid, nom, email, type } = req.body;
+  const { email, password, nom, type } = req.body;
 
   try {
-    await firestore.collection("utilisateurs").doc(uid).set({ nom, email, type });
-    res.status(200).send({ message: "Utilisateur enregistré !" });
+    // 1. Créer l'utilisateur dans Firebase Authentication
+    const userRecord = await admin.auth().createUser({
+      email,
+      password
+    });
+
+    const uid = userRecord.uid;
+
+    // 2. Enregistrer dans Firestore
+    await firestore.collection("utilisateurs").doc(uid).set({
+      nom,
+      email,
+      type,
+      online: false // ✅ Ajout de la présence par défaut
+    });
+
+    res.status(200).send({
+      message: "Utilisateur inscrit avec succès",
+      uid: uid
+    });
+
   } catch (err) {
-    console.error("Erreur Firestore :", err);
-    res.status(500).send({ error: "Erreur lors de l'inscription." });
+    console.error("Erreur lors de l'inscription :", err);
+    res.status(500).send({
+      message: "Échec de l'inscription",
+      erreur: err.message
+    });
+  }
+});
+
+
+//ROUTE POUR LA CONNEXION
+// Route connexion
+app.post("/connexion", async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    // Authentification via Firebase Auth REST API
+    const response = await axios.post(
+      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=AIzaSyDZ4eYOquW0Sr8_2g0Se7f5DLlqGNh7ebo`,
+      {
+        email,
+        password,
+        returnSecureToken: true
+      }
+    );
+
+    const idToken = response.data.idToken;
+    const uid = response.data.localId;
+
+    // Récupérer les infos de Firestore avec le UID
+    const doc = await firestore.collection("utilisateurs").doc(uid).get();
+
+    if (!doc.exists) {
+      return res.status(404).send({ message: "Utilisateur non trouvé dans Firestore" });
+    }
+
+    const userData = doc.data();
+
+    res.status(200).send({
+      message: "Connexion réussie",
+      idToken,
+      uid,
+      email,
+      nom: userData.nom,
+      type: userData.type
+    });
+
+  } catch (error) {
+    console.error("Erreur de connexion :", error.response?.data || error.message);
+    res.status(401).send({
+      message: "Échec de la connexion",
+      erreur: error.response?.data?.error?.message || error.message
+    });
+  }
+});
+
+//========afficher les chauffeurs en ligne======
+app.get("/chauffeurs-en-ligne", async (req, res) => {
+  try {
+    const snapshot = await firestore.collection("utilisateurs")
+      .where("type", "==", "chauffeur")
+      .where("online", "==", true)
+      .get();
+
+    const chauffeursEnLigne = [];
+    snapshot.forEach(doc => {
+      chauffeursEnLigne.push({ uid: doc.id, ...doc.data() });
+    });
+
+    res.status(200).send({ chauffeurs: chauffeursEnLigne });
+  } catch (err) {
+    console.error("Erreur lors de la récupération des chauffeurs en ligne :", err);
+    res.status(500).send({ error: "Erreur serveur lors de la récupération." });
+  }
+});
+
+// ACTIVER EN LIGNE ET ENVOYER LA POSITION CHAUFFEUR 
+// Met à jour la présence en ligne et envoie la position du chauffeur
+app.post("/presence", async (req, res) => {
+  const { uid, online, latitude, longitude } = req.body;
+
+  try {
+    // Mettre à jour le statut "en ligne" dans Firestore
+    await firestore.collection("utilisateurs").doc(uid).update({
+      online: online
+    });
+
+    let positionMiseAJour = false;
+
+    // S'il y a latitude et longitude, enregistrer dans Realtime DB
+    if (latitude !== undefined && longitude !== undefined) {
+      await realtimeDB.ref(`positions_chauffeurs/${uid}`).set({
+        latitude,
+        longitude,
+        timestamp: new Date().toISOString()
+      });
+
+      positionMiseAJour = true;
+    }
+
+    res.status(200).send({
+      message: `Présence activée (${online ? "en ligne" : "hors ligne"})`,
+      positionMiseAJour
+    });
+
+  } catch (err) {
+    console.error("Erreur mise à jour présence :", err);
+    res.status(500).send({ error: "Erreur lors de la mise à jour" });
+  }
+});
+
+// ROUTE POUR DESACTIVER LA PRESENCE EN LIGNE
+app.post("/desactiver-presence", async (req, res) => {
+  const { uid } = req.body;
+
+  try {
+    await firestore.collection("utilisateurs").doc(uid).update({
+      online: false
+    });
+
+    res.status(200).send({
+      message: "Présence désactivée (hors ligne)"
+    });
+
+  } catch (err) {
+    console.error("Erreur lors de la désactivation de la présence :", err);
+    res.status(500).send({
+      error: "Échec de la désactivation de la présence"
+    });
+  }
+});
+
+
+//// ROUTE RECUPERER LA POSITION D'UN CHAUFFERU VIA SON UID
+app.get("/position-chauffeur/:uid", async (req, res) => {
+  const uid = req.params.uid;
+
+  try {
+    const snapshot = await realtimeDB.ref(`positions_chauffeurs/${uid}`).once("value");
+
+    if (!snapshot.exists()) {
+      return res.status(404).send({ error: "Position non trouvée pour ce chauffeur." });
+    }
+
+    const position = snapshot.val();
+
+    res.status(200).send({
+      uid: uid,
+      latitude: position.latitude,
+      longitude: position.longitude
+    });
+
+  } catch (err) {
+    console.error("Erreur lors de la récupération de la position :", err);
+    res.status(500).send({ error: "Erreur serveur lors de la récupération de la position." });
+  }
+});
+//.ROUTE POUR SUPPRIMER LA POSITION DU CHAUFFEUR
+app.post("/supprimer-position", async (req, res) => {
+  const { uid } = req.body;
+
+  if (!uid) {
+    return res.status(400).send({ error: "UID manquant." });
+  }
+
+  try {
+    await realtimeDB.ref(`positions_chauffeurs/${uid}`).remove();
+
+    res.status(200).send({
+      message: "Position supprimée avec succès",
+      uid: uid
+    });
+
+  } catch (err) {
+    console.error("Erreur lors de la suppression de la position :", err);
+    res.status(500).send({ error: "Erreur lors de la suppression de la position." });
+  }
+});
+
+//  ROUTE ENVOYER LA RESERVATION AUX CHAUFFEURS ON LINE
+app.post("/reserver", async (req, res) => {
+  const { client_uid, chauffeur_uid, depart, arrivee, prix } = req.body;
+
+  try {
+    // 1. Vérifier que le chauffeur est en ligne dans Firestore
+    const chauffeurDoc = await firestore.collection("utilisateurs").doc(chauffeur_uid).get();
+    
+    if (!chauffeurDoc.exists) {
+      return res.status(404).send({ message: "Chauffeur non trouvé." });
+    }
+
+    const chauffeurData = chauffeurDoc.data();
+    if (chauffeurData.online !== true) {
+      return res.status(400).send({ message: "Ce chauffeur n'est pas en ligne." });
+    }
+
+    // 2. Créer une réservation dans Realtime Database
+    const ref = realtimeDB.ref("reservations/" + chauffeur_uid);
+
+    const nouvelleReservation = {
+      client_uid,
+      depart,
+      arrivee,
+      prix,
+      statut: "en_attente",
+      timestamp: Date.now()
+    };
+
+    const nouvelleRef = await ref.push(nouvelleReservation);
+
+    res.status(200).send({
+      message: "Réservation envoyée au chauffeur.",
+      reservation_id: nouvelleRef.key
+    });
+
+  } catch (err) {
+    console.error("Erreur lors de la réservation :", err);
+    res.status(500).send({ message: "Erreur serveur", erreur: err.message });
+  }
+});
+// ROUTE POUR ACCEPTER UNE RESERVATION 
+app.post("/reservation/accepter", async (req, res) => {
+  const { chauffeur_uid, reservation_id } = req.body;
+
+  try {
+    await admin
+      .database()
+      .ref(`reservations/${chauffeur_uid}/${reservation_id}/statut`)
+      .set("acceptee");
+
+    res.status(200).send({ message: "Réservation acceptée." });
+  } catch (err) {
+    console.error("Erreur :", err);
+    res.status(500).send({ message: "Erreur lors de l'acceptation de la réservation." });
+  }
+});
+
+// ROUTE POUR REFUSER UNE RESERVATION 
+// Refuser une réservation
+app.post("/reservation/refuser", async (req, res) => {
+  const { chauffeur_uid, reservation_id } = req.body;
+
+  if (!chauffeur_uid || !reservation_id) {
+    return res.status(400).send({ error: "chauffeur_uid et reservation_id requis." });
+  }
+
+  try {
+    await realtimeDB
+      .ref(`reservations/${chauffeur_uid}/${reservation_id}/statut`)
+      .set("refusee");
+
+    res.status(200).send({ message: "Réservation refusée." });
+  } catch (error) {
+    console.error("Erreur lors du refus de la réservation :", error);
+    res.status(500).send({ error: "Erreur serveur lors du refus de la réservation." });
   }
 });
 
@@ -40,4 +312,3 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log("Serveur Express démarré sur le port " + PORT);
 });
-
