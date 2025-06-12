@@ -2,13 +2,15 @@ const axios = require('axios');
 const express = require("express");
 const admin = require("firebase-admin");
 const cors = require("cors");
+const fetch = require('node-fetch');// ligne ajoutée 
+
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
 // Initialisation Firebase Admin
-const serviceAccount = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+const serviceAccount = JSON.parse(process.env.GOOGLE_CREDENTIALS); //ligne code ajouté
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
