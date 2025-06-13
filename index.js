@@ -137,7 +137,7 @@ app.get("/chauffeurs-en-ligne", async (req, res) => {
 });
 
 // ACTIVER EN LIGNE ET ENVOYER LA POSITION CHAUFFEUR 
-// Met à jour la présence en ligne et envoie la position du chauffeur
+
 app.post("/presence", async (req, res) => {
   const { uid, online, latitude, longitude } = req.body;
 
@@ -171,27 +171,35 @@ app.post("/presence", async (req, res) => {
   }
 });
 
-// ROUTE POUR DESACTIVER LA PRESENCE EN LIGNE
+// √ Desactiver la presence en ligne et supprimer la position du chauffeur 
 app.post("/desactiver-presence", async (req, res) => {
   const { uid } = req.body;
 
+  if (!uid) {
+    return res.status(400).send({ error: "UID manquant." });
+  }
+
   try {
+    // 1. Mettre à jour la présence en ligne dans Firestore
     await firestore.collection("utilisateurs").doc(uid).update({
       online: false
     });
 
+    // 2. Supprimer la position du chauffeur dans Realtime Database
+    await realtimeDB.ref(`positions_chauffeurs/${uid}`).remove();
+
     res.status(200).send({
-      message: "Présence désactivée (hors ligne)"
+      message: "Présence désactivée et position supprimée",
+      uid: uid
     });
 
   } catch (err) {
-    console.error("Erreur lors de la désactivation de la présence :", err);
+    console.error("Erreur lors de la désactivation :", err);
     res.status(500).send({
-      error: "Échec de la désactivation de la présence"
+      error: "Erreur lors de la désactivation ou de la suppression de la position"
     });
   }
 });
-
 
 //// ROUTE RECUPERER LA POSITION D'UN CHAUFFERU VIA SON UID
 app.get("/position-chauffeur/:uid", async (req, res) => {
@@ -215,27 +223,6 @@ app.get("/position-chauffeur/:uid", async (req, res) => {
   } catch (err) {
     console.error("Erreur lors de la récupération de la position :", err);
     res.status(500).send({ error: "Erreur serveur lors de la récupération de la position." });
-  }
-});
-//.ROUTE POUR SUPPRIMER LA POSITION DU CHAUFFEUR
-app.post("/supprimer-position", async (req, res) => {
-  const { uid } = req.body;
-
-  if (!uid) {
-    return res.status(400).send({ error: "UID manquant." });
-  }
-
-  try {
-    await realtimeDB.ref(`positions_chauffeurs/${uid}`).remove();
-
-    res.status(200).send({
-      message: "Position supprimée avec succès",
-      uid: uid
-    });
-
-  } catch (err) {
-    console.error("Erreur lors de la suppression de la position :", err);
-    res.status(500).send({ error: "Erreur lors de la suppression de la position." });
   }
 });
 
