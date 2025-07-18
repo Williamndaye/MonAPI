@@ -338,6 +338,30 @@ app.get("/reservations/:chauffeur_uid", async (req, res) => {
     res.status(500).json({ error: "Erreur serveur" });
   }
 });
+//ROUTE POUR AFFICHER LES RESERVATIONS COTE client
+app.get("/reservation/client/:uid", async (req, res) => {
+  const clientUID = req.params.uid;
+
+  try {
+    const snapshot = await firestore.collection("reservations")
+      .where("client_uid", "==", clientUID)
+      .get();
+
+    if (snapshot.empty) {
+      return res.status(200).json([]); // Aucune réservation trouvée
+    }
+
+    const reservations = [];
+    snapshot.forEach(doc => {
+      reservations.push({ id: doc.id, ...doc.data() });
+    });
+
+    res.status(200).json(reservations);
+  } catch (error) {
+    console.error("Erreur lors de la récupération des réservations client :", error);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
+});
 
 // Démarrage serveur
 const PORT = process.env.PORT || 3000;
