@@ -304,6 +304,40 @@ app.post("/reservation/refuser", async (req, res) => {
     res.status(500).send({ error: "Erreur serveur lors du refus de la réservation." });
   }
 });
+//ROUTE POUR AFFICHER TOUTES LES reservations
+app.get("/reservations/:chauffeur_uid", async (req, res) => {
+  const chauffeur_uid = req.params.chauffeur_uid;
+
+  try {
+    const ref = realtimeDB.ref(`reservations/${chauffeur_uid}`);
+    const snapshot = await ref.once("value");
+
+    if (!snapshot.exists()) {
+      return res.status(200).json({ reservations: [] });
+    }
+
+    const allReservations = snapshot.val();
+    const filtered = [];
+
+    for (const id in allReservations) {
+      const resData = allReservations[id];
+
+      // Filtrer uniquement les réservations en attente ou autre critère
+      if (resData.statut === "en_attente") {
+        filtered.push({
+          id,
+          ...resData
+        });
+      }
+    }
+
+    res.status(200).json({ reservations: filtered });
+
+  } catch (error) {
+    console.error("Erreur lors de la récupération des réservations :", error);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
 
 // Démarrage serveur
 const PORT = process.env.PORT || 3000;
