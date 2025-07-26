@@ -22,12 +22,7 @@ const realtimeDB = admin.database();
 
 // Route test
 app.get("/test", (req, res) => {
-  res.json({ message: "Serveur Node.js opérationnel ✅" });
-});
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Serveur en ligne sur le port ${PORT}`);
+  res.json({ message: "Serveur Node.js opérationnel"  });
 });
 // ROUTE POUR L'INSCRIPTION
 app.post("/inscription", async (req, res) => {
