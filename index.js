@@ -21,13 +21,6 @@ const firestore = admin.firestore();
 const realtimeDB = admin.database();
 
 // Route test
-const express = require("express");
-const cors = require("cors");
-const app = express();
-
-app.use(cors());
-app.use(express.json());
-
 app.get("/test", (req, res) => {
   res.json({ message: "Serveur Node.js opérationnel ✅" });
 });
