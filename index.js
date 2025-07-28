@@ -48,7 +48,7 @@ app.post("/inscription", async (req, res) => {
     });
 
     res.status(200).send({
-      message: "Utilisateur inscrit avec succès",
+      message: "Bravo votre Inscription a reussie",
       uid: uid
     });
 
@@ -58,7 +58,7 @@ app.post("/inscription", async (req, res) => {
     let errorMessage = "Échec de l'inscription";
 
     if (err.code === 'auth/email-already-exists') {
-      errorMessage = "Cet email est déjà utilisé";
+      errorMessage = "Cet email est deja utilise";
       return res.status(400).send({ message: errorMessage });
     }
 
@@ -98,10 +98,7 @@ app.post("/connexion", async (req, res) => {
     const userData = doc.data();
 
     res.status(200).send({
-      message: "Connexion réussie",
-      idToken,
-      uid,
-      email,
+      message: "Connexion reussie",
       nom: userData.nom,
       type: userData.type
     });
@@ -149,7 +146,7 @@ app.post("/presence", async (req, res) => {
     });
 
     res.status(200).send({
-      message: `Présence ${online ? "activée (en ligne)" : "désactivée (hors ligne)"}`,
+      message: `Presence ${online ? "activee (en ligne)" : "desactivee (hors ligne)"}`,
       uid: uid,
       online: online
     });
@@ -208,7 +205,7 @@ app.get("/position-chauffeur/:uid", async (req, res) => {
     const snapshot = await realtimeDB.ref(`positions_chauffeurs/${uid}`).once("value");
 
     if (!snapshot.exists()) {
-      return res.status(404).send({ error: "Position non trouvée pour ce chauffeur." });
+      return res.status(404).send({ error: "Position non trouvee pour ce chauffeur." });
     }
 
     const position = snapshot.val();
@@ -233,7 +230,7 @@ app.post("/reserver", async (req, res) => {
     // 1. Vérifier que le chauffeur existe et est en ligne
     const chauffeurDoc = await firestore.collection("utilisateurs").doc(chauffeur_uid).get();
     if (!chauffeurDoc.exists) {
-      return res.status(404).send({ message: "Chauffeur non trouvé." });
+      return res.status(404).send({ message: "Chauffeur non trouve." });
     }
 
     const chauffeurData = chauffeurDoc.data();
@@ -250,7 +247,7 @@ app.post("/reserver", async (req, res) => {
     snapshot.forEach(chauffeurSnapshot => {
       chauffeurSnapshot.forEach(reservation => {
         const data = reservation.val();
-        if (data.client_uid === client_uid && data.statut !== "refusée") {
+        if (data.client_uid === client_uid && data.statut !== "refusee") {
           reservationExistante = data.statut;
         }
       });
@@ -258,11 +255,11 @@ app.post("/reserver", async (req, res) => {
 
     // 3. Si une réservation existe déjà pour ce client
     if (reservationExistante === "en_attente") {
-      return res.status(400).send({ message: "Vous avez une réservation en attente." });
+      return res.status(400).send({ message: "Vous avez une reservation en attente." });
     }
 
-    if (reservationExistante === "acceptée") {
-      return res.status(400).send({ message: "Vous avez une réservation en cours. Attendez votre chauffeur." });
+    if (reservationExistante === "acceptee") {
+      return res.status(400).send({ message: "Vous avez une reservation en cours. Attendez votre chauffeur." });
     }
 
     // 4. Créer une nouvelle réservation
@@ -279,12 +276,12 @@ app.post("/reserver", async (req, res) => {
     const nouvelleRef = await ref.push(nouvelleReservation);
 
     res.status(200).send({
-      message: "Réservation envoyée au chauffeur.",
+      message: "Reservation envoyee au chauffeur.",
       reservation_id: nouvelleRef.key
     });
 
   } catch (err) {
-    console.error("Erreur lors de la réservation :", err);
+    console.error("Erreur lors de la reservation :", err);
     res.status(500).send({ message: "Erreur serveur", erreur: err.message });
   }
 });
