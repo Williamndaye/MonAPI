@@ -230,9 +230,8 @@ app.post("/reserver", async (req, res) => {
   const { client_uid, chauffeur_uid, depart, arrivee, prix } = req.body;
 
   try {
-    // 1. Vérifier que le chauffeur est en ligne dans Firestore
+    // 1. Vérifier que le chauffeur existe et est en ligne
     const chauffeurDoc = await firestore.collection("utilisateurs").doc(chauffeur_uid).get();
-    
     if (!chauffeurDoc.exists) {
       return res.status(404).send({ message: "Chauffeur non trouvé." });
     }
@@ -242,9 +241,32 @@ app.post("/reserver", async (req, res) => {
       return res.status(400).send({ message: "Ce chauffeur n'est pas en ligne." });
     }
 
-    // 2. Créer une réservation dans Realtime Database
-    const ref = realtimeDB.ref("reservations/" + chauffeur_uid);
+    // 2. Vérifier les anciennes réservations du client dans Realtime Database
+    const reservationsRef = realtimeDB.ref("reservations");
+    const snapshot = await reservationsRef.once("value");
 
+    let reservationExistante = null;
+
+    snapshot.forEach(chauffeurSnapshot => {
+      chauffeurSnapshot.forEach(reservation => {
+        const data = reservation.val();
+        if (data.client_uid === client_uid && data.statut !== "refusée") {
+          reservationExistante = data.statut;
+        }
+      });
+    });
+
+    // 3. Si une réservation existe déjà pour ce client
+    if (reservationExistante === "en_attente") {
+      return res.status(400).send({ message: "Vous avez une réservation en attente." });
+    }
+
+    if (reservationExistante === "acceptée") {
+      return res.status(400).send({ message: "Vous avez une réservation en cours. Attendez votre chauffeur." });
+    }
+
+    // 4. Créer une nouvelle réservation
+    const ref = realtimeDB.ref("reservations/" + chauffeur_uid);
     const nouvelleReservation = {
       client_uid,
       depart,
