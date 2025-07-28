@@ -135,45 +135,31 @@ app.get("/chauffeurs-en-ligne", async (req, res) => {
   }
 });
 // ACTIVER ET DESACTIVER LA PRESENCE EN LIGNE
+app.post("/presence", async (req, res) => {
+  const { uid, online } = req.body;
 
-app.post("/position", async (req, res) => {
-  const { uid, latitude, longitude } = req.body;
-
-  if (!uid) {
-    return res.status(400).send({ error: "UID manquant." });
+  if (!uid || online === undefined) {
+    return res.status(400).send({ error: "UID ou statut 'online' manquant." });
   }
 
   try {
-    if (latitude !== undefined && longitude !== undefined) {
-      // Enregistrer la position
-      await realtimeDB.ref(`positions_chauffeurs/${uid}`).set({
-        latitude,
-        longitude,
-        timestamp: new Date().toISOString()
-      });
+    // Mettre à jour la présence dans Firestore
+    await firestore.collection("utilisateurs").doc(uid).update({
+      online: online
+    });
 
-      res.status(200).send({
-        message: "Position enregistrée avec succès",
-        uid: uid,
-        latitude,
-        longitude
-      });
-
-    } else {
-      // Supprimer la position (pas de lat/lng envoyé)
-      await realtimeDB.ref(`positions_chauffeurs/${uid}`).remove();
-
-      res.status(200).send({
-        message: "Position supprimée avec succès",
-        uid: uid
-      });
-    }
+    res.status(200).send({
+      message: `Présence ${online ? "activée (en ligne)" : "désactivée (hors ligne)"}`,
+      uid: uid,
+      online: online
+    });
 
   } catch (err) {
-    console.error("Erreur position :", err);
-    res.status(500).send({ error: "Erreur lors du traitement de la position." });
+    console.error("Erreur mise à jour présence :", err);
+    res.status(500).send({ error: "Erreur lors de la mise à jour de la présence." });
   }
 });
+
 //ROUTE POUR ENVOYER ET SUPPRIMER LA POSITION DU CHAUFFEUR 
 app.post("/position", async (req, res) => {
   const { uid, latitude, longitude } = req.body;
