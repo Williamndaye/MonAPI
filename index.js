@@ -24,6 +24,7 @@ const realtimeDB = admin.database();
 app.get("/test", (req, res) => {
   res.json({ message: "Serveur Node.js opérationnel"  });
 });
+//ROUTE INSCRIPTION
 // ROUTE POUR L'INSCRIPTION
 app.post("/inscription", async (req, res) => {
   const { email, password, nom, type } = req.body;
@@ -33,6 +34,7 @@ app.post("/inscription", async (req, res) => {
   }
 
   try {
+    // Créer l'utilisateur dans Firebase Authentication
     const userRecord = await admin.auth().createUser({
       email,
       password
@@ -40,15 +42,17 @@ app.post("/inscription", async (req, res) => {
 
     const uid = userRecord.uid;
 
+    // Enregistrer dans Firestore avec le champ UID également
     await firestore.collection("utilisateurs").doc(uid).set({
-      nom,
-      email,
-      type,
+      uid: uid,              // Ajout explicite du champ uid
+      nom: nom,
+      email: email,
+      type: type,
       online: false
     });
 
     res.status(200).send({
-      message: "Bravo votre Inscription a reussie",
+      message: "Bravo votre inscription a reussi",
       uid: uid
     });
 
@@ -58,7 +62,7 @@ app.post("/inscription", async (req, res) => {
     let errorMessage = "Échec de l'inscription";
 
     if (err.code === 'auth/email-already-exists') {
-      errorMessage = "Cet email est deja utilise";
+      errorMessage = "Cet email est déjà utilisé";
       return res.status(400).send({ message: errorMessage });
     }
 
