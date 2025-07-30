@@ -293,13 +293,44 @@ app.post("/reserver", async (req, res) => {
 app.post("/reservation/accepter", async (req, res) => {
   const { chauffeur_uid, reservation_id } = req.body;
 
+  if (!chauffeur_uid || !reservation_id) {
+    return res.status(400).send({ message: "chauffeur_uid et reservation_id requis." });
+  }
+
   try {
-    await admin
-      .database()
-      .ref(`reservations/${chauffeur_uid}/${reservation_id}/statut`)
-      .set("acceptee");
+    const chauffeurRef = realtimeDB.ref(`reservations/${chauffeur_uid}`);
+    const snapshot = await chauffeurRef.once("value");
+
+    if (!snapshot.exists()) {
+      return res.status(404).send({ message: "Aucune réservation trouvée pour ce chauffeur." });
+    }
+
+    // Vérifier si une réservation est déjà acceptée
+    let dejaAcceptee = false;
+    snapshot.forEach(child => {
+      const reservation = child.val();
+      if (reservation.statut === "acceptee") {
+        dejaAcceptee = true;
+      }
+    });
+
+    if (dejaAcceptee) {
+      return res.status(400).send({ message: "Vous avez déjà une réservation acceptée en cours." });
+    }
+
+    // Vérifier que la réservation spécifique existe
+    const resRef = realtimeDB.ref(`reservations/${chauffeur_uid}/${reservation_id}`);
+    const resSnapshot = await resRef.once("value");
+
+    if (!resSnapshot.exists()) {
+      return res.status(404).send({ message: "Réservation introuvable." });
+    }
+
+    // Mettre à jour le statut
+    await resRef.child("statut").set("acceptee");
 
     res.status(200).send({ message: "Réservation acceptée." });
+
   } catch (err) {
     console.error("Erreur :", err);
     res.status(500).send({ message: "Erreur lors de l'acceptation de la réservation." });
@@ -307,25 +338,47 @@ app.post("/reservation/accepter", async (req, res) => {
 });
 
 // ROUTE POUR REFUSER UNE RESERVATION 
-// Refuser une réservation
+
 app.post("/reservation/refuser", async (req, res) => {
   const { chauffeur_uid, reservation_id } = req.body;
 
   if (!chauffeur_uid || !reservation_id) {
-    return res.status(400).send({ error: "chauffeur_uid et reservation_id requis." });
+    return res.status(400).send({ message: "chauffeur_uid et reservation_id requis." });
   }
 
   try {
-    await realtimeDB
-      .ref(`reservations/${chauffeur_uid}/${reservation_id}/statut`)
-      .set("refusee");
+    const reservationRef = realtimeDB.ref(`reservations/${chauffeur_uid}/${reservation_id}`);
+    const snapshot = await reservationRef.once("value");
 
-    res.status(200).send({ message: "Réservation refusée." });
+    if (!snapshot.exists()) {
+      return res.status(404).send({ message: "Réservation introuvable." });
+    }
+
+    const reservation = snapshot.val();
+
+    if (reservation.statut === "acceptee") {
+      return res.status(400).send({ message: "Impossible de refuser : la réservation a déjà été acceptée." });
+    }
+
+    if (reservation.statut === "refusee") {
+      return res.status(400).send({ message: "Réservation déjà refusée." });
+    }
+
+    if (reservation.statut !== "en_attente") {
+      return res.status(400).send({ message: "Cette réservation n’est pas dans un état valide pour être refusée." });
+    }
+
+    // Mise à jour du statut
+    await reservationRef.child("statut").set("refusee");
+
+    res.status(200).send({ message: "Réservation refusée avec succès." });
+
   } catch (error) {
     console.error("Erreur lors du refus de la réservation :", error);
-    res.status(500).send({ error: "Erreur serveur lors du refus de la réservation." });
+    res.status(500).send({ message: "Erreur serveur lors du refus de la réservation." });
   }
 });
+
 //ROUTE POUR AFFICHER TOUTES LES reservations
 app.get("/reservations/:chauffeur_uid", async (req, res) => {
   const chauffeur_uid = req.params.chauffeur_uid;
