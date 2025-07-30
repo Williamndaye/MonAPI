@@ -427,7 +427,7 @@ app.get("/reservations/:chauffeur_uid", async (req, res) => {
   const chauffeur_uid = req.params.chauffeur_uid;
 
   try {
-    const ref = realtimeDB.ref("reservations");
+    const ref = realtimeDB.ref(`reservations/${chauffeur_uid}`);
     const snapshot = await ref.once("value");
 
     if (!snapshot.exists()) {
@@ -435,27 +435,25 @@ app.get("/reservations/:chauffeur_uid", async (req, res) => {
     }
 
     const allReservations = snapshot.val();
-    const filtered = [];
+    const reservationsArray = [];
 
-    for (const reservationId in allReservations) {
-      const resData = allReservations[reservationId];
-
-      // Vérifie si cette réservation est pour ce chauffeur
-      if (resData.chauffeur_uid === chauffeur_uid) {
-        filtered.push({
-          id: reservationId,
-          ...resData
-        });
-      }
+    for (const id in allReservations) {
+      const resData = allReservations[id];
+      // Aucune condition ici, on prend tout
+      reservationsArray.push({
+        id,
+        ...resData
+      });
     }
 
-    res.status(200).json({ reservations: filtered });
+    res.status(200).json({ reservations: reservationsArray });
 
   } catch (error) {
     console.error("Erreur lors de la récupération des réservations :", error);
     res.status(500).json({ error: "Erreur serveur" });
   }
 });
+
 //ROUTE POUR AFFICHER LES RESERVATIONS COTE client
 app.get("/reservations-client/:client_uid", async (req, res) => {
   const client_uid = req.params.client_uid;
