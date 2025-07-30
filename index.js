@@ -378,6 +378,49 @@ app.post("/reservation/refuser", async (req, res) => {
     res.status(500).send({ message: "Erreur serveur lors du refus de la réservation." });
   }
 });
+// ROUTE POUR TERMINER LA reservation
+app.post("/reservation/terminer", async (req, res) => {
+  const { chauffeur_uid, reservation_id } = req.body;
+
+  if (!chauffeur_uid || !reservation_id) {
+    return res.status(400).send({ message: "chauffeur_uid et reservation_id requis." });
+  }
+
+  try {
+    const reservationRef = realtimeDB.ref(`reservations/${chauffeur_uid}/${reservation_id}`);
+    const snapshot = await reservationRef.once("value");
+
+    if (!snapshot.exists()) {
+      return res.status(404).send({ message: "Réservation introuvable." });
+    }
+
+    const reservation = snapshot.val();
+
+    if (reservation.statut === "en_attente") {
+      return res.status(400).send({ message: "Impossible de terminer une réservation en attente." });
+    }
+
+    if (reservation.statut === "refusee") {
+      return res.status(400).send({ message: "Cette réservation a été refusée." });
+    }
+
+    if (reservation.statut === "terminee") {
+      return res.status(400).send({ message: "Cette réservation est déjà terminée." });
+    }
+
+    if (reservation.statut !== "acceptee") {
+      return res.status(400).send({ message: "Réservation dans un état non valide pour être terminée." });
+    }
+
+    await reservationRef.child("statut").set("terminee");
+
+    res.status(200).send({ message: "Réservation marquée comme terminée." });
+
+  } catch (error) {
+    console.error("Erreur lors de la mise à jour :", error);
+    res.status(500).send({ message: "Erreur serveur lors de la terminaison de la réservation." });
+  }
+});
 
 //ROUTE POUR AFFICHER TOUTES LES reservations
 app.get("/reservations/:chauffeur_uid", async (req, res) => {
