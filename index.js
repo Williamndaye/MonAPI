@@ -422,12 +422,12 @@ app.post("/reservation/terminer", async (req, res) => {
   }
 });
 
-//ROUTE POUR AFFICHER TOUTES LES reservations
+// ROUTE POUR AFFICHER LES RESERVATIOS DU CHAUFFEUR 
 app.get("/reservations/:chauffeur_uid", async (req, res) => {
   const chauffeur_uid = req.params.chauffeur_uid;
 
   try {
-    const ref = realtimeDB.ref(`reservations/${chauffeur_uid}`);
+    const ref = realtimeDB.ref("reservations");
     const snapshot = await ref.once("value");
 
     if (!snapshot.exists()) {
@@ -437,13 +437,13 @@ app.get("/reservations/:chauffeur_uid", async (req, res) => {
     const allReservations = snapshot.val();
     const filtered = [];
 
-    for (const id in allReservations) {
-      const resData = allReservations[id];
+    for (const reservationId in allReservations) {
+      const resData = allReservations[reservationId];
 
-      // Filtrer uniquement les réservations en attente ou autre critère
-      if (resData.statut === "en_attente") {
+      // Vérifie si cette réservation est pour ce chauffeur
+      if (resData.chauffeur_uid === chauffeur_uid) {
         filtered.push({
-          id,
+          id: reservationId,
           ...resData
         });
       }
@@ -457,27 +457,42 @@ app.get("/reservations/:chauffeur_uid", async (req, res) => {
   }
 });
 //ROUTE POUR AFFICHER LES RESERVATIONS COTE client
-app.get("/reservation/client/:uid", async (req, res) => {
-  const clientUID = req.params.uid;
+app.get("/reservations-client/:client_uid", async (req, res) => {
+  const client_uid = req.params.client_uid;
 
   try {
-    const snapshot = await firestore.collection("reservations")
-      .where("client_uid", "==", clientUID)
-      .get();
+    const ref = realtimeDB.ref("reservations");
+    const snapshot = await ref.once("value");
 
-    if (snapshot.empty) {
-      return res.status(200).json([]); // Aucune réservation trouvée
+    if (!snapshot.exists()) {
+      return res.status(200).json({ reservations: [] });
     }
 
-    const reservations = [];
-    snapshot.forEach(doc => {
-      reservations.push({ id: doc.id, ...doc.data() });
-    });
+    const data = snapshot.val();
+    const results = [];
 
-    res.status(200).json(reservations);
+    // Parcours des réservations par chauffeur
+    for (const chauffeurUID in data) {
+      const reservationsParChauffeur = data[chauffeurUID];
+
+      for (const reservationID in reservationsParChauffeur) {
+        const reservation = reservationsParChauffeur[reservationID];
+
+        if (reservation.client_uid === client_uid) {
+          results.push({
+            id: reservationID,
+            chauffeur_uid: chauffeurUID,
+            ...reservation
+          });
+        }
+      }
+    }
+
+    res.status(200).json({ reservations: results });
+
   } catch (error) {
     console.error("Erreur lors de la récupération des réservations client :", error);
-    res.status(500).json({ message: "Erreur serveur" });
+    res.status(500).json({ error: "Erreur serveur" });
   }
 });
 
